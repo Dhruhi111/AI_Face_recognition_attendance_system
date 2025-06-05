@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Attendance System</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+        }
+        .tab {
+            flex: 1;
+            text-align: center;
+            padding: 15px;
+            cursor: pointer;
+            border-bottom: 2px solid #ddd;
+            transition: all 0.3s ease;
+        }
+        .tab.active {
+            border-bottom: 2px solid #3498db;
+            color: #3498db;
+            font-weight: bold;
+        }
+        .tab-content {
+            display: none;
+            padding: 20px 0;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .webcam-container {
+            width: 100%;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        #webcam {
+            width: 100%;
+            max-width: 500px;
+            border: 3px solid #ddd;
+            border-radius: 5px;
+        }
+        .upload-container {
+            border: 2px dashed #ddd;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        .upload-container:hover {
+            border-color: #3498db;
+        }
+        #uploadPreview {
+            max-width: 100%;
+            max-height: 300px;
+            margin-top: 20px;
+            display: none;
+        }
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+        .button:hover {
+            background-color: #2980b9;
+        }
+        .button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .result-container {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+            display: none;
+        }
+        .result-container h3 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .loading:after {
+            content: '.';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60% { content: '...'; }
+            80%, 100% { content: ''; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Smart Attendance System</h1>
+        
+        <div class="tabs">
+            <div class="tab active" data-tab="upload">Upload Image</div>
+            <div class="tab" data-tab="webcam">Capture Image</div>
+        </div>
+        
+        <div id="uploadTab" class="tab-content active">
+            <div class="upload-container">
+                <p>Drag & Drop your image here or</p>
+                <input type="file" id="fileInput" accept="image/*" style="display: none;">
+                <button class="button" onclick="document.getElementById('fileInput').click()">Browse Files</button>
+                <img id="uploadPreview" alt="Preview">
+            </div>
+            <div style="text-align: center;">
+                <button id="predictUpload" class="button" disabled>Predict</button>
+            </div>
+        </div>
+        
+        <div id="webcamTab" class="tab-content">
+            <div class="webcam-container">
+                <video id="webcam" autoplay playsinline></video>
+            </div>
+            <div style="text-align: center;">
+                <button id="captureBtn" class="button">Capture Image</button>
+                <button id="predictCapture" class="button" disabled>Predict</button>
+                <canvas id="canvas" style="display:none;"></canvas>
+            </div>
+        </div>
+        
+        <div class="loading" id="loading">Processing</div>
+        
+        <div class="result-container" id="resultContainer">
+            <h3>Recognition Result:</h3>
+            <p id="resultName">Name: <span id="name"></span></p>
+            <p id="resultConfidence">Confidence: <span id="confidence"></span>%</p>
+        </div>
+    </div>
+
+    <script>
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+                
+                tab.classList.add('active');
+                document.getElementById(tab.getAttribute('data-tab') + 'Tab').classList.add('active');
+            });
+        });
+        
+        // File upload handling
+        const fileInput = document.getElementById('fileInput');
+        const uploadPreview = document.getElementById('uploadPreview');
+        const predictUploadBtn = document.getElementById('predictUpload');
+        
+        fileInput.addEventListener('change', function() {
+            const file = this.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    uploadPreview.src = e.target.result;
+                    uploadPreview.style.display = 'block';
+                    predictUploadBtn.disabled = false;
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+        
+        // Webcam handling
+        const webcamElement = document.getElementById('webcam');
+        const canvasElement = document.getElementById('canvas');
+        const captureBtn = document.getElementById('captureBtn');
+        const predictCaptureBtn = document.getElementById('predictCapture');
+        let stream;
+        
+        // Start webcam when webcam tab is clicked
+        document.querySelector('.tab[data-tab="webcam"]').addEventListener('click', startWebcam);
+        
+        function startWebcam() {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(function(s) {
+                        stream = s;
+                        webcamElement.srcObject = stream;
+                    })
+                    .catch(function(error) {
+                        console.error("Error accessing webcam:", error);
+                        alert("Could not access the webcam. Please make sure it's connected and you've given permission.");
+                    });
+            } else {
+                alert("Your browser doesn't support webcam access. Please try a different browser.");
+            }
+        }
+        
+        // Capture image from webcam
+        captureBtn.addEventListener('click', function() {
+            const context = canvasElement.getContext('2d');
+            canvasElement.width = webcamElement.videoWidth;
+            canvasElement.height = webcamElement.videoHeight;
+            context.drawImage(webcamElement, 0, 0, canvasElement.width, canvasElement.height);
+            
+            // Enable the predict button
+            predictCaptureBtn.disabled = false;
+        });
+        
+        // Predict from uploaded image
+        predictUploadBtn.addEventListener('click', function() {
+            const file = fileInput.files[0];
+            if (!file) return;
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            sendPredictionRequest(formData);
+        });
+        
+        // Predict from captured image
+        predictCaptureBtn.addEventListener('click', function() {
+            const imageData = canvasElement.toDataURL('image/jpeg');
+            
+            const formData = new FormData();
+            formData.append('image_data', imageData);
+            
+            sendPredictionRequest(formData);
+        });
+        
+        // Send prediction request to server
+        function sendPredictionRequest(formData) {
+            // Show loading indicator
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('resultContainer').style.display = 'none';
+            
+            fetch('/predict', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('resultContainer').style.display = 'block';
+                
+                document.getElementById('name').textContent = data.name;
+                document.getElementById('confidence').textContent = 
+                    (data.confidence * 100).toFixed(2);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('loading').style.display = 'none';
+                alert('Error processing the image. Please try again.');
+            });
+        }
+        
+        // Clean up webcam when changing tabs
+        document.querySelector('.tab[data-tab="upload"]').addEventListener('click', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        });
+    </script>
+</body>
+</html>
